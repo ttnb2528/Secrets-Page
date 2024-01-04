@@ -40,7 +40,8 @@ app.post('/register',async  (req, res) => {
     const password = req.body.password;
 
     try {
-        await db.query("insert into users (username, password) values ($1, encode(digest($2, 'sha512'), 'hex'));",
+        // Should use 8-16 bytes to ensure security, and default is 16
+        await db.query("insert into users (username, password) values ($1, crypt($2, gen_salt('bf', 8)));",
         [username, password]);
 
         res.render('secrets');
@@ -59,7 +60,7 @@ app.post('/login', async (req, res) => {
 
     
     try {
-        const result = await db.query("SELECT * FROM users WHERE username = $1 AND password = encode(digest($2, 'sha512'), 'hex');",
+        const result = await db.query("SELECT * FROM users WHERE username = $1 AND password = crypt($2, password);",
         [username, password]);
 
         if (result.rows.length > 0) {
