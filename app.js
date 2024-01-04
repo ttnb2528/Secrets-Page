@@ -40,7 +40,7 @@ app.post('/register',async  (req, res) => {
     const password = req.body.password;
 
     try {
-        await db.query("INSERT INTO users (username, password) VALUES ($1, crypt($2, gen_salt('md5')));",
+        await db.query("insert into users (username, password) values ($1, encode(digest($2, 'sha512'), 'hex'));",
         [username, password]);
 
         res.render('secrets');
@@ -59,7 +59,7 @@ app.post('/login', async (req, res) => {
 
     
     try {
-        const result = await db.query('SELECT * FROM users WHERE username = $1 AND password = crypt($2, password);',
+        const result = await db.query("SELECT * FROM users WHERE username = $1 AND password = encode(digest($2, 'sha512'), 'hex');",
         [username, password]);
 
         if (result.rows.length > 0) {
