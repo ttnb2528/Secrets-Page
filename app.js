@@ -3,9 +3,7 @@ import bodyParser from "body-parser";
 import ejs from "ejs";
 import pg from "pg";
 import session from "express-session";
-import passport from "passport";
 import cookieParser from "cookie-parser";
-import passportLocal from "passport-local";
 // Add crypto library to pgAdmin to use crypt in queries
 
 const app = express();
@@ -34,31 +32,7 @@ app.use(
   })
 );
 
-app.use(cookieParser());
-
-// config passport to initialize and use session
-app.use(passport.initialize());
-app.use(passport.session());
-
-// passport.use(
-//   new passportLocal.Strategy(function (username, password, done) {
-//     db.query(
-//       "SELECT * FROM users WHERE username = $1 AND password = crypt($2, password);",
-//       [username, password],
-//       (err, result) => {
-//         if (err) {
-//           return done(err);
-//         }
-
-//         if (result.rows.length > 0) {
-//           return done(null, result.rows[0]);
-//         } else {
-//           return done(null, false);
-//         }
-//       }
-//     );
-//   })
-// );
+app.use(cookieParser())
 
 db.connect();
 
@@ -75,10 +49,10 @@ app.get("/login", (req, res) => {
 });
 
 app.get("/secrets", (req, res) => {
-  if (req.session.user) {
+  if(req.session.user) {
     res.render("secrets");
   } else {
-    res.redirect("/login");
+    res.redirect('/login');
   }
 });
 
