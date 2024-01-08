@@ -1,20 +1,25 @@
+import dotenv from "dotenv";
+dotenv.config();
 import express from "express";
 import bodyParser from "body-parser";
-import ejs from "ejs";
 import pg from "pg";
 import session from "express-session";
 import cookieParser from "cookie-parser";
+import passport from "passport";
+import { Strategy as LocalStrategy } from "passport-local";
 // Add crypto library to pgAdmin to use crypt in queries
+
+// console.log(dbPassword);
 
 const app = express();
 const port = 3000;
 
 const db = new pg.Client({
-  user: "postgres",
-  host: "localhost",
-  database: "Secrets",
-  password: "Tan281201!",
-  port: 5432,
+  user: process.env.POSTGRES_USER,
+  host: process.env.POSTGRES_HOST,
+  database: process.env.POSTGRES_DB,
+  password: process.env.POSTGRES_PASSWORD,
+  port: process.env.POSTGRES_PORT,
 });
 
 app.use(express.static("public"));
@@ -32,7 +37,51 @@ app.use(
   })
 );
 
-app.use(cookieParser())
+passport.use(
+  new LocalStrategy(async (username, password, done) => {
+    try {
+      const result = await db.query("SELECT * FROM users");
+      const user = result.rows.find((user) =>  username === user.username);
+
+      console.log(user);
+
+      if (user) {
+        if (password === user.password) {
+          return done(null, user);
+        } else {
+          return done(null, false, { message: "Incorrect password" });
+        }
+      } else {
+        return done(null, false, { message: "Incorrect username" });
+      }
+    } catch (err) {
+      console.log(err);
+    }
+  })
+);
+
+passport.serializeUser((user, done) => {
+  done(null, user.username);
+});
+
+passport.deserializeUser(async (username, done) => {
+  try {
+      const result = await db.query(
+          `SELECT * FROM users
+          WHERE username = $1`, [username]
+      );
+      const user = result.rows[0];
+      done(null, user);
+  } catch (error) {
+      console.log("An error occured: ", error);
+      done(error);
+  }
+})
+
+app.use(cookieParser());
+
+app.use(passport.initialize());
+app.use(passport.session());
 
 db.connect();
 
@@ -49,10 +98,10 @@ app.get("/login", (req, res) => {
 });
 
 app.get("/secrets", (req, res) => {
-  if(req.session.user) {
+  if (req.session.user) {
     res.render("secrets");
   } else {
-    res.redirect('/login');
+    res.redirect("/login");
   }
 });
 
@@ -84,31 +133,10 @@ app.post("/register", async (req, res) => {
   }
 });
 
-app.post("/login", async (req, res) => {
-  const username = req.body.username;
-  const password = req.body.password;
-
-  try {
-    const result = await db.query(
-      "SELECT * FROM users WHERE username = $1 AND password = crypt($2, password);",
-      [username, password]
-    );
-
-    if (result.rows.length > 0) {
-      req.session.user = result.rows[0];
-      console.log(req.session.user);
-      res.render("secrets");
-    } else {
-      res.render("login", {
-        error: "Username or password is incorrect!",
-      });
-    }
-  } catch (err) {
-    res.render("login", {
-      error: "Username or password is incorrect!",
-    });
-  }
-});
+app.post("/login", passport.authenticate("local", {
+  successRedirect: "/secrets",
+  failureRedirect: "/login",
+}));
 
 app.listen(port, () => {
   console.log(`Server started on port ${port}`);
