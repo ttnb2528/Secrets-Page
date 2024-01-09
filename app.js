@@ -8,6 +8,7 @@ import session from "express-session";
 import cookieParser from "cookie-parser";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 // Add crypto library to pgAdmin to use crypt in queries
 
 const saltRounds = bcrypt.genSaltSync(10);
@@ -72,6 +73,7 @@ passport.deserializeUser(async (username, done) => {
           WHERE username = $1`,
       [username]
     );
+
     const user = result.rows[0];
     done(null, user);
   } catch (error) {
@@ -80,12 +82,59 @@ passport.deserializeUser(async (username, done) => {
   }
 });
 
+// google authentication
+passport.use(
+  new GoogleStrategy(
+    {
+      clientID: process.env.CLIENT_ID,
+      clientSecret: process.env.CLIENT_SECRET,
+      callbackURL: "http://localhost:3000/auth/google/secrets",
+    },
+    async function (accessToken, refreshToken, profile, done) {
+      const username = profile.emails[0].value;
+      const googleId = profile.id
+      console.log("Google email: ", username);
+      console.log("Google id: ", googleId);
+
+      try {
+        const result = await db.query("SELECT * FROM users WHERE username = $1", [username]);
+
+        if (result.rows[0]) {
+          const user = result.rows[0];
+          return done(null, user)
+        } else {
+          const hashGoogleId = bcrypt.hashSync(googleId, saltRounds);
+          const insertResult = await db.query("INSERT INTO users (username, password) VALUES ($1, $2) RETURNING *;", [username, hashGoogleId]);
+
+          const user = insertResult.rows[0];
+          return done(null, user);
+        }
+      } catch (err) {
+        console.log(err);
+      }
+    }
+  )
+);
+
 app.use(cookieParser());
 
 app.use(passport.initialize());
 app.use(passport.session());
 
 db.connect();
+
+app.get(
+  "/auth/google",
+  passport.authenticate("google", { scope: ["profile", "email"] })
+);
+
+app.get(
+  "/auth/google/secrets",
+  passport.authenticate("google", {
+    successRedirect: "/secrets",
+    failureRedirect: "/login",
+  })
+);
 
 app.get("/", (req, res) => {
   res.render("home");
@@ -108,8 +157,14 @@ app.get("/secrets", (req, res) => {
 });
 
 app.get("/logout", (req, res) => {
-  req.session.destroy();
-  res.redirect("/");
+  req.logOut((err) => {
+    if (err) {
+      console.error("Error during logout:", err);
+      return next(err);
+    }
+
+    res.redirect("/");
+  });
 });
 
 app.post("/register", async (req, res) => {
@@ -144,11 +199,11 @@ app.post("/register", async (req, res) => {
   //           passport.authenticate('local')(req, res, function () {
   //               res.redirect('/secrets');
   //           })
- 
+
   //       } catch (error) {
   //           console.log("An error occured: ", error);
   //       }
- 
+
   //   });
 });
 
