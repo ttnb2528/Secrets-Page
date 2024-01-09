@@ -9,6 +9,7 @@ import cookieParser from "cookie-parser";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
+import { Strategy as FacebookStrategy } from "passport-facebook";
 // Add crypto library to pgAdmin to use crypt in queries
 
 const saltRounds = bcrypt.genSaltSync(10);
@@ -89,6 +90,7 @@ passport.use(
       clientID: process.env.CLIENT_ID,
       clientSecret: process.env.CLIENT_SECRET,
       callbackURL: "http://localhost:3000/auth/google/secrets",
+      userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
     },
     async function (accessToken, refreshToken, profile, done) {
       const username = profile.emails[0].value;
@@ -116,6 +118,41 @@ passport.use(
   )
 );
 
+// facebook authentication
+passport.use(
+  new FacebookStrategy(
+    {
+      clientID: process.env.FACE_ID,
+      clientSecret: process.env.FACE_SECRET,
+      callbackURL: "http://localhost:3000/auth/facebook/secrets"
+    },
+    async function (accessToken, refreshToken, profile, done) {
+      console.log(profile);
+      const username = profile.displayName;
+      const facebookId = profile.id
+      console.log("facebook username: ", username);
+      console.log("facebook id: ", facebookId);
+
+      try {
+        const result = await db.query("SELECT * FROM users WHERE username = $1", [username]);
+
+        if (result.rows[0]) {
+          const user = result.rows[0];
+          return done(null, user)
+        } else {
+          const hashFacebookId = bcrypt.hashSync(facebookId, saltRounds);
+          const insertResult = await db.query("INSERT INTO users (username, password) VALUES ($1, $2) RETURNING *;", [username, hashFacebookId]);
+
+          const user = insertResult.rows[0];
+          return done(null, user);
+        }
+      } catch (err) {
+        console.log(err);
+      }
+    }
+  )
+);
+
 app.use(cookieParser());
 
 app.use(passport.initialize());
@@ -132,6 +169,19 @@ app.get(
   "/auth/google/secrets",
   passport.authenticate("google", {
     successRedirect: "/secrets",
+    failureRedirect: "/login",
+  })
+);
+
+app.get(
+  "/auth/facebook",
+  passport.authenticate("facebook")
+);
+
+app.get(
+  "/auth/facebook/secrets",
+  passport.authenticate("facebook", {
+    successRedirect: "/secrets",  
     failureRedirect: "/login",
   })
 );
