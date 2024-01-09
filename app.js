@@ -3,13 +3,14 @@ dotenv.config();
 import express from "express";
 import bodyParser from "body-parser";
 import pg from "pg";
+import bcrypt from "bcrypt";
 import session from "express-session";
 import cookieParser from "cookie-parser";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 // Add crypto library to pgAdmin to use crypt in queries
 
-// console.log(dbPassword);
+const saltRounds = bcrypt.genSaltSync(10);
 
 const app = express();
 const port = 3000;
@@ -30,8 +31,8 @@ app.set("view engine", "ejs");
 // config the session
 app.use(
   session({
-    secret: "Our little secret.",
-    resave: true,
+    secret: process.env.SESSION_SECRET,
+    resave: false,
     saveUninitialized: false,
     cookie: { secure: process.env.NODE_ENV === "production" },
   })
@@ -41,16 +42,16 @@ passport.use(
   new LocalStrategy(async (username, password, done) => {
     try {
       const result = await db.query("SELECT * FROM users");
-      const user = result.rows.find((user) =>  username === user.username);
-
-      console.log(user);
+      const user = result.rows.find((user) => username === user.username);
 
       if (user) {
-        if (password === user.password) {
-          return done(null, user);
-        } else {
-          return done(null, false, { message: "Incorrect password" });
-        }
+        bcrypt.compare(password, user.password, (err, result) => {
+          if (result) {
+            return done(null, user);
+          } else {
+            return done(null, false, { message: "Incorrect password" });
+          }
+        });
       } else {
         return done(null, false, { message: "Incorrect username" });
       }
@@ -66,17 +67,18 @@ passport.serializeUser((user, done) => {
 
 passport.deserializeUser(async (username, done) => {
   try {
-      const result = await db.query(
-          `SELECT * FROM users
-          WHERE username = $1`, [username]
-      );
-      const user = result.rows[0];
-      done(null, user);
+    const result = await db.query(
+      `SELECT * FROM users
+          WHERE username = $1`,
+      [username]
+    );
+    const user = result.rows[0];
+    done(null, user);
   } catch (error) {
-      console.log("An error occured: ", error);
-      done(error);
+    console.log("An error occured: ", error);
+    done(error);
   }
-})
+});
 
 app.use(cookieParser());
 
@@ -98,7 +100,7 @@ app.get("/login", (req, res) => {
 });
 
 app.get("/secrets", (req, res) => {
-  if (req.session.user) {
+  if (req.isAuthenticated()) {
     res.render("secrets");
   } else {
     res.redirect("/login");
@@ -113,30 +115,50 @@ app.get("/logout", (req, res) => {
 app.post("/register", async (req, res) => {
   const username = req.body.username;
   const password = req.body.password;
-
+  // Hashing a password
+  const plainPassword = password;
+  const hashedPassword = bcrypt.hashSync(plainPassword, saltRounds);
   try {
-    // Should use 8-16 bytes to ensure security, and default is 16
-    const result = await db.query(
-      "insert into users (username, password) values ($1, crypt($2, gen_salt('bf', 8))) returning *;",
-      [username, password]
+    const response = await db.query(
+      `INSERT INTO users (username, password)
+                  VALUES ($1, $2)
+                  RETURNING *`,
+      [username, hashedPassword]
     );
-
-    req.session.user = result.rows[0];
-    console.log(req.session.user);
-    res.render("secrets");
-  } catch (err) {
-    res.render("register", {
-      error: "Something went wrong, let try again!",
+    passport.authenticate("local")(req, res, function () {
+      res.redirect("/secrets");
     });
-
-    console.log(err);
+  } catch (error) {
+    console.log("An error occured: ", error);
   }
+
+  // const plainPassword = password;
+  //   bcrypt.hash(plainPassword, saltRounds, async (err, hash) => {
+  //       // Store 'hash' in the database
+  //       try {
+  //           const response = await db.query(
+  //               `INSERT INTO users (username, password)
+  //                   VALUES ($1, $2)
+  //                   RETURNING *`, [username, hash]
+  //           );
+  //           passport.authenticate('local')(req, res, function () {
+  //               res.redirect('/secrets');
+  //           })
+ 
+  //       } catch (error) {
+  //           console.log("An error occured: ", error);
+  //       }
+ 
+  //   });
 });
 
-app.post("/login", passport.authenticate("local", {
-  successRedirect: "/secrets",
-  failureRedirect: "/login",
-}));
+app.post(
+  "/login",
+  passport.authenticate("local", {
+    successRedirect: "/secrets",
+    failureRedirect: "/login",
+  })
+);
 
 app.listen(port, () => {
   console.log(`Server started on port ${port}`);
