@@ -63,10 +63,13 @@ passport.use(
   })
 );
 
+// Được gọi sau khi xác thực thành công, Chỉ cần lưu một thông tin để nhận dạng duy nhất user
 passport.serializeUser((user, done) => {
   done(null, user.username);
 });
 
+// Được gọi ở mỗi request tiếp theo, Nhận vào dữ liệu đã lưu trong session ở serializeUser
+// Sử dụng dữ liệu đó để tìm lại đối tượng user đầy đủ từ database
 passport.deserializeUser(async (username, done) => {
   try {
     const result = await db.query(
@@ -94,19 +97,25 @@ passport.use(
     },
     async function (accessToken, refreshToken, profile, done) {
       const username = profile.emails[0].value;
-      const googleId = profile.id
+      const googleId = profile.id;
       console.log("Google email: ", username);
       console.log("Google id: ", googleId);
 
       try {
-        const result = await db.query("SELECT * FROM users WHERE username = $1", [username]);
+        const result = await db.query(
+          "SELECT * FROM users WHERE username = $1",
+          [username]
+        );
 
         if (result.rows[0]) {
           const user = result.rows[0];
-          return done(null, user)
+          return done(null, user);
         } else {
           const hashGoogleId = bcrypt.hashSync(googleId, saltRounds);
-          const insertResult = await db.query("INSERT INTO users (username, password) VALUES ($1, $2) RETURNING *;", [username, hashGoogleId]);
+          const insertResult = await db.query(
+            "INSERT INTO users (username, password) VALUES ($1, $2) RETURNING *;",
+            [username, hashGoogleId]
+          );
 
           const user = insertResult.rows[0];
           return done(null, user);
@@ -124,24 +133,30 @@ passport.use(
     {
       clientID: process.env.FACE_ID,
       clientSecret: process.env.FACE_SECRET,
-      callbackURL: "http://localhost:3000/auth/facebook/secrets"
+      callbackURL: "http://localhost:3000/auth/facebook/secrets",
     },
     async function (accessToken, refreshToken, profile, done) {
       console.log(profile);
       const username = profile.displayName;
-      const facebookId = profile.id
+      const facebookId = profile.id;
       console.log("facebook username: ", username);
       console.log("facebook id: ", facebookId);
 
       try {
-        const result = await db.query("SELECT * FROM users WHERE username = $1", [username]);
+        const result = await db.query(
+          "SELECT * FROM users WHERE username = $1",
+          [username]
+        );
 
         if (result.rows[0]) {
           const user = result.rows[0];
-          return done(null, user)
+          return done(null, user);
         } else {
           const hashFacebookId = bcrypt.hashSync(facebookId, saltRounds);
-          const insertResult = await db.query("INSERT INTO users (username, password) VALUES ($1, $2) RETURNING *;", [username, hashFacebookId]);
+          const insertResult = await db.query(
+            "INSERT INTO users (username, password) VALUES ($1, $2) RETURNING *;",
+            [username, hashFacebookId]
+          );
 
           const user = insertResult.rows[0];
           return done(null, user);
@@ -173,15 +188,12 @@ app.get(
   })
 );
 
-app.get(
-  "/auth/facebook",
-  passport.authenticate("facebook")
-);
+app.get("/auth/facebook", passport.authenticate("facebook"));
 
 app.get(
   "/auth/facebook/secrets",
   passport.authenticate("facebook", {
-    successRedirect: "/secrets",  
+    successRedirect: "/secrets",
     failureRedirect: "/login",
   })
 );
