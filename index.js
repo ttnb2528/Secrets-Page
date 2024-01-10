@@ -40,6 +40,7 @@ app.use(
   })
 );
 
+// the passport use to check login and password
 passport.use(
   new LocalStrategy(async (username, password, done) => {
     try {

@@ -1,0 +1,5 @@
+done là hàm callback được gọi sau khi xác thực xong.
+Nó nhận các tham số:
+Tham số thứ nhất: lỗi nếu có
+Tham số thứ 2: user object nếu xác thực thành công
+Tham số thứ 3: thông tin lỗi nếu xác thực thất bại
