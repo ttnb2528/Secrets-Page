@@ -211,13 +211,43 @@ app.get("/login", (req, res) => {
   res.render("login");
 });
 
-app.get("/secrets", (req, res) => {
-  if (req.isAuthenticated()) {
-    res.render("secrets");
+app.get("/secrets", async (req, res, next) => {
+  if(req.isAuthenticated()) {
+    try {
+      const result = await db.query("SELECT * FROM users WHERE secret IS NOT NULL and username = $1;", [req.user.username]);
+      const users = result.rows;
+      res.render("secrets", { users });
+    } catch (err) {
+      console.log(err);
+    }
   } else {
     res.redirect("/login");
   }
 });
+
+app.get("/submit", (req, res) => {
+  if (req.isAuthenticated()) {
+    res.render("submit");
+  } else {
+    res.redirect("/login");
+  }
+});
+
+app.post("/submit", async (req, res) => {
+  const secretSubmit = req.body.secret;
+  
+  const result = await db.query("SELECT * FROM users WHERE username = $1;", [req.user.username]);
+  const user = result.rows[0];
+
+  if (user) {
+    try {
+      await db.query("INSERT INTO users (username, password, secret) VALUES ($1, $2, $3);", [req.user.username, req.user.password, secretSubmit]);
+      res.redirect("secrets");
+    } catch (err) {
+      console.log(err);
+    }
+  }
+})
 
 app.get("/logout", (req, res) => {
   req.logOut((err) => {

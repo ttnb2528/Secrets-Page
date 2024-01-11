@@ -3,3 +3,11 @@ Nó nhận các tham số:
 Tham số thứ nhất: lỗi nếu có
 Tham số thứ 2: user object nếu xác thực thành công
 Tham số thứ 3: thông tin lỗi nếu xác thực thất bại
+
+****************************************************************
+SOME BUGS NEED TO BE FIXED
+
+unique username,
+check if the user already exists,
+need to use router(),
+requires res/login input,
